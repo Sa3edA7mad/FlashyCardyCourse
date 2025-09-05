@@ -1,0 +1,55 @@
+---
+alwaysApply: true
+description: "shadcn UI component library usage guidelines"
+---
+
+# shadcn UI Guidelines
+
+This project uses **shadcn UI** for all UI elements. shadcn UI provides beautifully designed, accessible, and customizable components built with Radix UI and Tailwind CSS.
+
+## Project Configuration
+
+The project is configured with shadcn UI as evidenced by the [components.json](mdc:components.json) file in the root directory.
+
+## Installation Commands
+
+### Initialize shadcn UI (if not already done)
+```bash
+npx shadcn@latest init
+```
+
+### Add Individual Components
+To install specific components, use:
+```bash
+npx shadcn@latest add [component-name]
+```
+
+**Examples:**
+- Button: `npx shadcn@latest add button`
+- Card: `npx shadcn@latest add card`
+- Input: `npx shadcn@latest add input`
+- Dialog: `npx shadcn@latest add dialog`
+- Form: `npx shadcn@latest add form`
+
+## Component Usage Guidelines
+
+1. **Always use shadcn UI components** instead of creating custom UI components from scratch
+2. Components are typically located in `src/components/ui/` directory
+3. Import components from their respective files: `import { Button } from "@/components/ui/button"`
+4. Customize components using Tailwind CSS classes and component variants
+5. Check [shadcn UI documentation](https://ui.shadcn.com/) for available components and their usage
+
+## Component Structure
+
+- Components are installed in `src/components/ui/`
+- Each component comes with TypeScript definitions
+- Components use Tailwind CSS for styling
+- Built-in dark mode support
+- Accessible by default (ARIA compliant)
+
+## Before Adding New UI Elements
+
+1. Check if a shadcn UI component exists for your use case
+2. If available, install it using `npx shadcn@latest add [component-name]`
+3. Only create custom components if shadcn UI doesn't provide the needed functionality
+4. When customizing, prefer using component variants and Tailwind classes

@@ -1,0 +1,251 @@
+---
+alwaysApply: true
+description: Data handling patterns for server components, server actions, and validation
+---
+
+# Data Handling Architecture Patterns
+
+This project follows strict patterns for data handling to ensure security, type safety, and performance.
+
+## Server Components for Data Retrieval
+
+**MANDATORY**: All data retrieval operations MUST be performed in server components, never in client components.
+
+### ✅ CORRECT - Server Component Data Fetching
+```typescript
+// app/decks/page.tsx (Server Component)
+import { auth } from "@clerk/nextjs/server";
+import { db } from "@/db";
+import { decksTable } from "@/db/schema";
+import { eq } from "drizzle-orm";
+
+export default async function DecksPage() {
+  const { userId } = auth();
+  
+  if (!userId) {
+    redirect("/sign-in");
+  }
+
+  // Data fetching happens in server component
+  const decks = await db
+    .select()
+    .from(decksTable)
+    .where(eq(decksTable.userId, userId));
+
+  return <DecksGrid decks={decks} />;
+}
+```
+
+### ❌ WRONG - Client Component Data Fetching
+```typescript
+// DON'T DO THIS - No useEffect/fetch in client components
+"use client";
+import { useEffect, useState } from "react";
+
+export default function DecksPage() {
+  const [decks, setDecks] = useState([]);
+  
+  useEffect(() => {
+    fetch("/api/decks").then(/* ... */); // FORBIDDEN
+  }, []);
+}
+```
+
+## Server Actions for Data Mutations
+
+**MANDATORY**: All database mutations (INSERT, UPDATE, DELETE) MUST be performed via server actions, never via API routes or client-side code.
+
+### ✅ CORRECT - Server Action Pattern
+```typescript
+// app/actions/deck-actions.ts
+"use server";
+
+import { auth } from "@clerk/nextjs/server";
+import { db } from "@/db";
+import { decksTable } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
+import { z } from "zod";
+import { revalidatePath } from "next/cache";
+
+// Zod schema for validation
+const CreateDeckSchema = z.object({
+  title: z.string().min(1, "Title is required").max(100),
+  description: z.string().max(500).optional(),
+});
+
+// TypeScript type derived from Zod schema
+type CreateDeckData = z.infer<typeof CreateDeckSchema>;
+
+export async function createDeck(data: CreateDeckData) {
+  const { userId } = auth();
+  
+  if (!userId) {
+    throw new Error("Unauthorized");
+  }
+
+  // Validate data with Zod
+  const validatedData = CreateDeckSchema.parse(data);
+
+  const [newDeck] = await db
+    .insert(decksTable)
+    .values({
+      ...validatedData,
+      userId,
+    })
+    .returning();
+
+  revalidatePath("/decks");
+  return newDeck;
+}
+```
+
+### ❌ WRONG - API Route for Mutations
+```typescript
+// DON'T DO THIS - No API routes for mutations
+export async function POST(request: Request) {
+  const body = await request.json(); // FORBIDDEN PATTERN
+  // Database mutation in API route - NOT ALLOWED
+}
+```
+
+## Zod Validation Requirements
+
+**MANDATORY**: All data validation MUST use Zod schemas. Every server action MUST validate its input data.
+
+### ✅ CORRECT - Zod Validation Pattern
+```typescript
+import { z } from "zod";
+
+// Define Zod schema
+const UpdateCardSchema = z.object({
+  id: z.number().positive(),
+  front: z.string().min(1, "Front text is required"),
+  back: z.string().min(1, "Back text is required"),
+});
+
+// Generate TypeScript type from schema
+type UpdateCardData = z.infer<typeof UpdateCardSchema>;
+
+export async function updateCard(data: UpdateCardData) {
+  // Validate input data
+  const validatedData = UpdateCardSchema.parse(data);
+  
+  // Continue with validated data...
+}
+```
+
+### ❌ WRONG - No Validation or Manual Validation
+```typescript
+// DON'T DO THIS - No validation
+export async function updateCard(data: any) { // FORBIDDEN
+  // No validation - NOT ALLOWED
+}
+
+// DON'T DO THIS - Manual validation
+export async function updateCard(data: unknown) {
+  if (typeof data !== "object") { // FORBIDDEN - Use Zod instead
+    throw new Error("Invalid data");
+  }
+}
+```
+
+## TypeScript Type Requirements
+
+**MANDATORY**: Server actions MUST use properly typed parameters. NEVER use `FormData` as a type for server actions.
+
+### ✅ CORRECT - Typed Server Action Parameters
+```typescript
+// Define TypeScript type (preferably from Zod schema)
+type DeleteDeckData = {
+  id: number;
+};
+
+export async function deleteDeck(data: DeleteDeckData) {
+  // Type-safe parameter handling
+  const validatedData = DeleteDeckSchema.parse(data);
+  // ...
+}
+```
+
+### ❌ WRONG - FormData or Untyped Parameters
+```typescript
+// DON'T DO THIS - FormData type
+export async function deleteDeck(formData: FormData) { // FORBIDDEN
+  const id = formData.get("id");
+}
+
+// DON'T DO THIS - Untyped parameters
+export async function deleteDeck(data: any) { // FORBIDDEN
+  // ...
+}
+```
+
+## Client Component Integration
+
+Client components should interact with server actions through forms or transition hooks:
+
+### ✅ CORRECT - Client Component with Server Action
+```typescript
+"use client";
+
+import { useTransition } from "react";
+import { createDeck } from "@/app/actions/deck-actions";
+
+export function CreateDeckForm() {
+  const [isPending, startTransition] = useTransition();
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    
+    // Convert FormData to typed object
+    const data = {
+      title: formData.get("title") as string,
+      description: formData.get("description") as string,
+    };
+
+    startTransition(async () => {
+      await createDeck(data); // Pass typed data to server action
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {/* Form fields */}
+    </form>
+  );
+}
+```
+
+## Forbidden Patterns
+
+❌ **NEVER** fetch data in client components with useEffect
+❌ **NEVER** use API routes for database mutations  
+❌ **NEVER** skip Zod validation in server actions
+❌ **NEVER** use `FormData` as parameter type in server actions
+❌ **NEVER** use `any` or untyped parameters in server actions
+❌ **NEVER** perform database operations directly in client components
+❌ **NEVER** bypass authentication checks in server actions
+
+## Required Imports
+
+Every server action file should include:
+```typescript
+"use server"; // Must be first line
+
+import { auth } from "@clerk/nextjs/server";
+import { db } from "@/db";
+import { z } from "zod";
+import { revalidatePath } from "next/cache"; // For cache invalidation
+```
+
+## Summary
+
+1. **Data Retrieval**: Server components only
+2. **Data Mutations**: Server actions only  
+3. **Validation**: Zod schemas required
+4. **Types**: Proper TypeScript types, no FormData
+5. **Security**: Always authenticate and authorize
+6. **Performance**: Use revalidatePath for cache management
+
+This architecture ensures type safety, security, and optimal performance while maintaining clear separation between server and client concerns.

@@ -1,0 +1,145 @@
+---
+alwaysApply: true
+description: "Enforces the use of Drizzle ORM for all database interactions in the FlashyCardyCourse project"
+---
+
+# Database Interactions - Drizzle ORM Only
+
+This project uses **Drizzle ORM** exclusively for all database interactions. All database operations must follow the established patterns and use the configured schema and connection.
+
+## Database Configuration
+
+- **Schema Definition**: [src/db/schema.ts](mdc:src/db/schema.ts) - Contains all table definitions and relations
+- **Database Connection**: [src/db/index.ts](mdc:src/db/index.ts) - Exports the configured `db` instance
+- **Drizzle Config**: [drizzle.config.ts](mdc:drizzle.config.ts) - Migration and schema configuration
+
+## Mandatory Usage Rules
+
+### 1. Always Import from Schema
+```typescript
+// ✅ CORRECT - Import tables and relations from schema
+import { decksTable, cardsTable } from "@/db/schema";
+import { db } from "@/db";
+
+// ❌ WRONG - Never create raw SQL queries or use other ORMs
+```
+
+### 2. Database Connection
+```typescript
+// ✅ CORRECT - Always use the configured db instance
+import { db } from "@/db";
+
+// ❌ WRONG - Never create new database connections
+import { drizzle } from 'drizzle-orm/neon-http';
+const myDb = drizzle(url); // DON'T DO THIS
+```
+
+### 3. Query Patterns
+
+#### Selecting Data
+```typescript
+// ✅ CORRECT - Use Drizzle query methods
+import { eq, and, desc } from "drizzle-orm";
+
+// Get all decks for a user
+const userDecks = await db
+  .select()
+  .from(decksTable)
+  .where(eq(decksTable.userId, userId))
+  .orderBy(desc(decksTable.createdAt));
+
+// Get deck with cards (using relations)
+const deckWithCards = await db.query.decksTable.findFirst({
+  where: eq(decksTable.id, deckId),
+  with: {
+    cards: true,
+  },
+});
+```
+
+#### Inserting Data
+```typescript
+// ✅ CORRECT - Use Drizzle insert methods
+const [newDeck] = await db
+  .insert(decksTable)
+  .values({
+    title: "New Deck",
+    description: "Description",
+    userId: userId,
+  })
+  .returning();
+```
+
+#### Updating Data
+```typescript
+// ✅ CORRECT - Use Drizzle update methods
+await db
+  .update(decksTable)
+  .set({
+    title: "Updated Title",
+    updatedAt: new Date(),
+  })
+  .where(eq(decksTable.id, deckId));
+```
+
+#### Deleting Data
+```typescript
+// ✅ CORRECT - Use Drizzle delete methods
+await db
+  .delete(cardsTable)
+  .where(eq(cardsTable.deckId, deckId));
+```
+
+## Available Tables and Relations
+
+### Tables
+- `decksTable` - Flashcard decks (id, title, description, userId, createdAt, updatedAt)
+- `cardsTable` - Individual flashcards (id, deckId, front, back, createdAt, updatedAt)
+
+### Relations
+- `decksRelations` - Deck to cards relationship (one-to-many)
+- `cardsRelations` - Card to deck relationship (many-to-one)
+
+## Forbidden Practices
+
+❌ **NEVER** write raw SQL queries
+❌ **NEVER** use other database libraries (Prisma, Sequelize, etc.)
+❌ **NEVER** create direct database connections outside of [src/db/index.ts](mdc:src/db/index.ts)
+❌ **NEVER** bypass the schema definitions in [src/db/schema.ts](mdc:src/db/schema.ts)
+
+## Error Handling
+
+Always wrap database operations in try-catch blocks and handle errors appropriately:
+
+```typescript
+try {
+  const result = await db.select().from(decksTable);
+  return result;
+} catch (error) {
+  console.error("Database operation failed:", error);
+  throw new Error("Failed to fetch decks");
+}
+```
+
+## Migration Commands
+
+Use these Drizzle Kit commands for schema changes:
+- `npx drizzle-kit generate` - Generate migration files
+- `npx drizzle-kit migrate` - Apply migrations
+- `npx drizzle-kit studio` - Open Drizzle Studio for database inspection
+
+## Type Safety
+
+Drizzle provides full TypeScript support. Always leverage the generated types:
+
+```typescript
+// ✅ CORRECT - Types are automatically inferred
+const deck: typeof decksTable.$inferSelect = await db.query.decksTable.findFirst();
+const newCard: typeof cardsTable.$inferInsert = {
+  deckId: 1,
+  front: "Question",
+  back: "Answer"
+};
+```
+
+This rule ensures consistency, type safety, and maintainable database interactions across the entire FlashyCardyCourse project.
